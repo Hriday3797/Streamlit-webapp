@@ -1,22 +1,27 @@
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.feature_selection import RFE
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.tree import DecisionTreeClassifier
 import plotly.graph_objects as go
-import altair as alt
-import warnings
-warnings.filterwarnings('ignore')
-import streamlit as st
-import numpy as np
-import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.feature_selection import RFE
 from sklearn.metrics import classification_report, roc_curve, roc_auc_score, accuracy_score, confusion_matrix
+import altair as alt
+import seaborn as sns
+import matplotlib.pyplot as plt
+import streamlit as st
+import warnings
 
-st.title(':red[PCOS Diagnosis Minor Project-II]')   
+warnings.filterwarnings('ignore')
 
+st.title(':red[PCOS Diagnosis Minor Project-II]')
+
+# Functions
 def remove_outliers(data, feature):
     Q1 = np.percentile(data[feature], 25, interpolation="midpoint")
     Q3 = np.percentile(data[feature], 75, interpolation="midpoint")
@@ -27,47 +32,37 @@ def remove_outliers(data, feature):
 
 data = pd.read_excel("PCOS_data_without_infertility.xlsx", sheet_name=1)
 
-# dropping the unnamed columns
+# Dropping the unnamed columns
 data.drop(data.columns[data.columns.str.contains('Unnamed', case=False)], axis=1, inplace=True)
 data.drop(data.columns[:2], axis=1, inplace=True)
 
-# few columns were non-numeric; we need to convert them to numeric values
+# Convert non-numeric columns to numeric
 for feature in data.select_dtypes(include='object').columns:
     data[feature] = pd.to_numeric(data[feature], errors='coerce')
 
 data = data.rename(columns=lambda x: x.strip())
 
-# filling missing values
+# Fill missing values
 data['Marraige Status (Yrs)'].fillna(data['Marraige Status (Yrs)'].mean(), inplace=True)
 data['Fast food (Y/N)'].fillna(data['Fast food (Y/N)'].mode()[0], inplace=True)
 data['II    beta-HCG(mIU/mL)'].fillna(data['II    beta-HCG(mIU/mL)'].mean(), inplace=True)
 data['AMH(ng/mL)'].fillna(data['AMH(ng/mL)'].mean(), inplace=True)
 
-# specifying target column and training feature columns
-target = 'PCOS (Y/N)'
-all_features = list(data.columns[1:])
-
-features_df = data[all_features]
-binary_features = features_df.columns[(features_df.max() == 1) & (features_df.min() == 0)]
-binary_data = features_df[binary_features]
-
-# dropping highly correlated values
+# Dropping columns and removing outliers
 data.drop(['Weight (Kg)'], axis=1, inplace=True)
 data.drop(['Hip(inch)'], axis=1, inplace=True)
 
-# removing outliers
-features_to_filter = ['BP _Systolic (mmHg)', "Pulse rate(bpm)", "Waist:Hip Ratio", 'BP _Systolic (mmHg)',
-                      'BP _Diastolic (mmHg)']
+features_to_filter = ['BP _Systolic (mmHg)', "Pulse rate(bpm)", "Waist:Hip Ratio", 'BP _Diastolic (mmHg)']
 for feature in features_to_filter:
     data = remove_outliers(data, feature=feature)
 
-# data scaling
+# Data scaling
 scaler = MinMaxScaler()
 scaled_data = scaler.fit_transform(data)
 scaled_data = pd.DataFrame(scaled_data)
 scaled_data.columns = data.columns
 
-# data balancing
+# Data balancing
 X = scaled_data.drop('PCOS (Y/N)', axis=1)
 y = scaled_data['PCOS (Y/N)']
 
@@ -96,8 +91,6 @@ chart = alt.Chart(df).mark_bar(color='#FFA07A').encode(
 chart = chart.properties(
     width=alt.Step(40)  # adjust the width of the bars
 )
-
-st.header('')
 
 st.altair_chart(chart, use_container_width=True)
 
@@ -137,11 +130,19 @@ left_inputs.pop(-2)  # Remove 'Hip(inch)' as it was previously dropped
 
 input_vals = np.array([left_inputs + right_inputs + last_input])
 
-def train_and_predict(model, X_train, y_train, X_test, input_val):
+# Define a function to train and predict with the selected model
+def train_and_predict(model, X_train, y_train, X_test, y_test, input_val):
     model.fit(X_train, y_train)
     preds = model.predict(X_test)
     custom_input = model.predict(input_val)
-    return preds, custom_input
+    
+    # Evaluation metrics
+    confusion = confusion_matrix(y_test, preds)
+    accuracy = accuracy_score(y_test, preds)
+    roc_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+    fpr, tpr, _ = roc_curve(y_test, model.predict_proba(X_test)[:, 1])
+    
+    return preds, custom_input, confusion, accuracy, roc_auc, fpr, tpr
 
 predict = st.button("Predict", use_container_width=True)
 
@@ -155,6 +156,30 @@ if predict:
     elif model_sel == "XGB Classifier":
         model = XGBClassifier()
 
-    preds, custom_input = train_and_predict(model, X_train, y_train, X_test, input_vals)
+    preds, custom_input, confusion, accuracy, roc_auc, fpr, tpr = train_and_predict(model, X_train, y_train, X_test, y_test, input_vals)
+    
     st.subheader("Diagnosis result")
     st.write("The patient is predicted to have PCOS" if custom_input[0] == 1 else "The patient is predicted not to have PCOS")
+
+    # Display Accuracy
+    st.write(f"Accuracy: {accuracy:.2f}")
+
+    # Display Confusion Matrix
+    st.subheader("Confusion Matrix")
+    fig, ax = plt.subplots()
+    sns.heatmap(confusion, annot=True, fmt='d', cmap='Blues', ax=ax)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('Actual')
+    ax.set_title('Confusion Matrix')
+    st.pyplot(fig)
+
+    # Display ROC AUC Curve
+    st.subheader("ROC AUC Curve")
+    fig, ax = plt.subplots()
+    ax.plot(fpr, tpr, color='blue', lw=2, label='ROC Curve (area = %0.2f)' % roc_auc)
+    ax.plot([0, 1], [0, 1], color='gray', linestyle='--')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title('Receiver Operating Characteristic (ROC) Curve')
+    ax.legend(loc='lower right')
+    st.pyplot(fig)
