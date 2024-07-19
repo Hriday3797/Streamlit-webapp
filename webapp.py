@@ -1,33 +1,22 @@
-import numpy as np
-import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
-
-# for feature selection
-from sklearn.feature_selection import RFE
-
-# for model training and visualization
-from streamlit_extras.metric_cards import style_metric_cards
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.tree import DecisionTreeClassifier
 import plotly.graph_objects as go
-# for module performance evaluation
-from sklearn.metrics import classification_report, roc_curve, roc_auc_score, accuracy_score, confusion_matrix
 import altair as alt
-# for filtering out warnings
 import warnings
 warnings.filterwarnings('ignore')
-
-# web ui
 import streamlit as st
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.feature_selection import RFE
+from sklearn.metrics import classification_report, roc_curve, roc_auc_score, accuracy_score, confusion_matrix
 
 st.title(':red[PCOS Diagnosis Minor Project-II]')   
 
-# functions
 def remove_outliers(data, feature):
     Q1 = np.percentile(data[feature], 25, interpolation="midpoint")
     Q3 = np.percentile(data[feature], 75, interpolation="midpoint")
@@ -126,7 +115,7 @@ right_inputs = []
 last_input = []
 
 with st.sidebar:
-    model_sel = st.selectbox("ML model: ", options=["Random Forest Classifier", "XGB Classifier", "AdaBoost Classifier", "K-Neighbors Classifier", "Logistic Regression"])
+    model_sel = st.selectbox("ML model: ", options=["Random Forest Classifier", "XGB Classifier", "AdaBoost Classifier", "Logistic Regression"])
 
 with col1:
     st.subheader("Enter Input Data")
@@ -148,7 +137,6 @@ left_inputs.pop(-2)  # Remove 'Hip(inch)' as it was previously dropped
 
 input_vals = np.array([left_inputs + right_inputs + last_input])
 
-# Define a function to train and predict with the selected model
 def train_and_predict(model, X_train, y_train, X_test, input_val):
     model.fit(X_train, y_train)
     preds = model.predict(X_test)
@@ -164,55 +152,9 @@ if predict:
         model = RandomForestClassifier()
     elif model_sel == "AdaBoost Classifier":
         model = AdaBoostClassifier()
-    elif model_sel == "K-Neighbors Classifier":
-        model = KNeighborsClassifier()
     elif model_sel == "XGB Classifier":
         model = XGBClassifier()
 
     preds, custom_input = train_and_predict(model, X_train, y_train, X_test, input_vals)
-
-    st.subheader("Classification Report")
-    st.dataframe(pd.DataFrame(classification_report(y_test, preds, output_dict=True)).transpose(), use_container_width=True)
-
-    cm = confusion_matrix(y_test, preds)
-    fig = go.Figure(data=go.Heatmap(
-        z=cm,
-        x=['Predicted 0', 'Predicted 1'],
-        y=['Actual 0', 'Actual 1'],
-        hoverongaps=False
-    ))
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            fig.add_annotation(dict(
-                x=j,
-                y=i,
-                text=str(cm[i, j]),
-                showarrow=False,
-                font=dict(color="black", size=12),
-                xanchor="center",
-                yanchor="middle"
-            ))
-
-    fig.update_layout(
-        title='Confusion Matrix',
-        xaxis=dict(title='Predicted Values'),
-        yaxis=dict(title='Actual Values')
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    roc_auc = roc_auc_score(y_test, preds)
-    fpr, tpr, thresholds = roc_curve(y_test, preds)
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name='ROC curve'))
-    fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Random guess', line=dict(dash='dash')))
-
-    fig.update_layout(
-        title=f'ROC Curve (AUC = {roc_auc:.2f})',
-        xaxis=dict(title='False Positive Rate'),
-        yaxis=dict(title='True Positive Rate')
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader(f'Prediction for custom input: {custom_input[0]}')
+    st.subheader("Diagnosis result")
+    st.write("The patient is predicted to have PCOS" if custom_input[0] == 1 else "The patient is predicted not to have PCOS")
