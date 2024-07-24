@@ -19,7 +19,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-st.title(':red[PCOS Diagnosis Minor Project-II]')
+st.title(':red[PCOS Diagnosis]')
 
 # Functions
 def remove_outliers(data, feature):
